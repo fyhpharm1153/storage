@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>醫院各科別藥費與處方品項數視覺化分析儀表板</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            800: '#0c4a6e',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .table-sticky-header th {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        .heatmap-high { background-color: rgba(239, 68, 68, 0.15); color: #991b1b; }
+        .heatmap-mid { background-color: rgba(245, 158, 11, 0.15); color: #92400e; }
+        .heatmap-low { background-color: rgba(34, 197, 94, 0.15); color: #166534; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="p-2.5 bg-blue-600 rounded-xl shadow-md">
+                    <i class="fa-solid me-0 fa-chart-line text-xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                        醫院各科別藥費與處方品項數分析儀表板
+                    </h1>
+                    <p class="text-xs text-slate-400 mt-0.5">多維度排除條件（1150811 及 1150817 版）前後數據視覺化比較</p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <button id="exportCsvBtn" onclick="exportToCSV()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg border border-slate-700 flex items-center gap-2 transition shadow-sm">
+                    <i class="fa-solid fa-file-csv text-emerald-400"></i>
+                    <span>匯出 CSV</span>
+                </button>
+                <button onclick="window.print()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg border border-slate-700 flex items-center gap-2 transition shadow-sm">
+                    <i class="fa-solid fa-print text-sky-400"></i>
+                    <span>列印 / PDF</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Top Insight KPI Cards -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Card 1: 全院每人次藥費 -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 hover:shadow-md transition">
+                <div class="flex items-center justify-between text-slate-500 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider">全院每人次藥費</span>
+                    <span class="p-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs"><i class="fa-solid fa-user-doctor"></i></span>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-2xl font-extrabold text-slate-900" id="kpi-p-p4">$441</span>
+                    <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        <i class="fa-solid fa-arrow-down mr-0.5"></i>33.7%
+                    </span>
+                </div>
+                <p class="text-xs text-slate-400 mt-2">排除前：<span class="font-medium text-slate-600">$665</span> ➔ 排除後3：<span class="font-semibold text-slate-800">$441</span></p>
+            </div>
+
+            <!-- Card 2: 全院每張處方藥費 -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 hover:shadow-md transition">
+                <div class="flex items-center justify-between text-slate-500 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider">全院每張處方藥費</span>
+                    <span class="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs"><i class="fa-solid fa-file-prescription"></i></span>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-2xl font-extrabold text-slate-900" id="kpi-r-r4">$509</span>
+                    <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        <i class="fa-solid fa-arrow-down mr-0.5"></i>45.3%
+                    </span>
+                </div>
+                <p class="text-xs text-slate-400 mt-2">排除前：<span class="font-medium text-slate-600">$931</span> ➔ 排除後3：<span class="font-semibold text-slate-800">$509</span></p>
+            </div>
+
+            <!-- Card 3: 全院處方品項數 -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 hover:shadow-md transition">
+                <div class="flex items-center justify-between text-slate-500 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider">全院處方平均品項數</span>
+                    <span class="p-1.5 bg-purple-50 text-purple-600 rounded-lg text-xs"><i class="fa-solid fa-pills"></i></span>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-2xl font-extrabold text-slate-900">3.34</span>
+                    <span class="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                        項 / 處方
+                    </span>
+                </div>
+                <p class="text-xs text-slate-400 mt-2">排除前：<span class="font-medium text-slate-600">3.35</span> ➔ 排除後3：<span class="font-semibold text-slate-800">3.34</span></p>
+            </div>
+
+            <!-- Card 4: 影響最大科別 -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 hover:shadow-md transition">
+                <div class="flex items-center justify-between text-slate-500 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider">最高降幅科別 (每人次)</span>
+                    <span class="p-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs"><i class="fa-solid fa-arrow-trend-down"></i></span>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-xl font-extrabold text-slate-900">感染科</span>
+                    <span class="text-xs font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
+                        -90.7%
+                    </span>
+                </div>
+                <p class="text-xs text-slate-400 mt-2">血液腫瘤科 (-81.7%) / 風濕科 (-87.0%)</p>
+            </div>
+        </section>
+
+        <!-- Interactive Chart Section -->
+        <section class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200/80">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-column text-blue-600"></i>
+                        <span>科別數據視覺化比較圖表</span>
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-0.5">選擇指標與展示模式以查看各科別排除前後之變化</p>
+                </div>
+
+                <!-- Controls -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Metric Selector -->
+                    <div class="flex items-center bg-slate-100 p-1 rounded-xl">
+                        <button onclick="setChartMetric('perVisit')" id="btn-metric-visit" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-white text-blue-600 shadow-sm">
+                            每人次藥費 ($)
+                        </button>
+                        <button onclick="setChartMetric('perRx')" id="btn-metric-rx" class="px-3 py-1.5 text-xs font-semibold text-slate-600 rounded-lg transition hover:text-slate-900">
+                            每張處方藥費 ($)
+                        </button>
+                        <button onclick="setChartMetric('items')" id="btn-metric-items" class="px-3 py-1.5 text-xs font-semibold text-slate-600 rounded-lg transition hover:text-slate-900">
+                            處方品項數
+                        </button>
+                    </div>
+
+                    <!-- View Filter -->
+                    <select id="chartDeptFilter" onchange="updateChart()" class="bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="top10">降幅最大 Top 10 科別</option>
+                        <option value="highest">藥費最高 Top 10 科別 (排除前)</option>
+                        <option value="all">全院所有科別 (25個)</option>
+                        <option value="internal">內科系統科別</option>
+                        <option value="surgical">外科系統科別</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Canvas Container -->
+            <div class="mt-4 relative h-80 sm:h-96 w-full">
+                <canvas id="mainChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Data Table Section -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+            <!-- Table Header Bar -->
+            <div class="p-4 sm:p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-table text-indigo-600"></i>
+                        <span>科別完整數據明細表</span>
+                    </h2>
+                    <span id="rowCountBadge" class="bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                        共 25 個科別
+                    </span>
+                </div>
+
+                <!-- Controls & Filters -->
+                <div class="flex flex-wrap items-center gap-3">
+                    <!-- Column Category Focus -->
+                    <div class="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
+                        <button onclick="setTableFocus('all')" id="tab-all" class="px-2.5 py-1 font-medium rounded-md bg-white shadow-xs text-slate-800">全部指標</button>
+                        <button onclick="setTableFocus('p')" id="tab-p" class="px-2.5 py-1 font-medium rounded-md text-slate-600 hover:text-slate-900">每人次藥費</button>
+                        <button onclick="setTableFocus('r')" id="tab-r" class="px-2.5 py-1 font-medium rounded-md text-slate-600 hover:text-slate-900">每張處方藥費</button>
+                        <button onclick="setTableFocus('i')" id="tab-i" class="px-2.5 py-1 font-medium rounded-md text-slate-600 hover:text-slate-900">處方品項數</button>
+                    </div>
+
+                    <!-- Heatmap Toggle Switch -->
+                    <label class="inline-flex items-center cursor-pointer text-xs font-medium text-slate-600">
+                        <input type="checkbox" id="heatmapToggle" onchange="toggleHeatmap()" class="sr-only peer">
+                        <div class="relative w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                        <span class="ml-2">高低色彩標記</span>
+                    </label>
+
+                    <!-- Search Box -->
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+                        <input type="text" id="searchInput" oninput="handleSearch()" placeholder="搜尋科別..." class="pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-36 sm:w-48 transition">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scrollable Table -->
+            <div class="overflow-x-auto max-h-[580px]">
+                <table class="w-full text-xs text-left border-collapse table-sticky-header">
+                    <thead>
+                        <!-- Main Group Headers -->
+                        <tr class="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider">
+                            <th rowspan="2" class="p-3 w-28 bg-slate-100 z-30 shadow-xs border-r border-slate-200">
+                                <div class="flex items-center justify-between cursor-pointer" onclick="sortTable('dept')">
+                                    <span>科別</span>
+                                    <i id="sort-icon-dept" class="fa-solid fa-sort text-slate-400"></i>
+                                </div>
+                            </th>
+
+                            <!-- Group 1: 每人次藥費 -->
+                            <th col-span-p text-center colspan="4" class="p-2 bg-blue-50/80 text-blue-900 border-r border-slate-200 col-group-p">
+                                <i class="fa-solid fa-user text-blue-600 mr-1"></i>每人次藥費 ($)
+                            </th>
+
+                            <!-- Group 2: 每張處方藥費 -->
+                            <th col-span-r text-center colspan="4" class="p-2 bg-indigo-50/80 text-indigo-900 border-r border-slate-200 col-group-r">
+                                <i class="fa-solid fa-receipt text-indigo-600 mr-1"></i>每張處方藥費 ($)
+                            </th>
+
+                            <!-- Group 3: 每張處方品項數 -->
+                            <th col-span-i text-center colspan="4" class="p-2 bg-purple-50/80 text-purple-900 col-group-i">
+                                <i class="fa-solid fa-pills text-purple-600 mr-1"></i>每張處方品項數 (項)
+                            </th>
+                        </tr>
+
+                        <!-- Sub Headers (Exclusion Versions) -->
+                        <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-center">
+                            <!--每人次藥費-->
+                            <th onclick="sortTable('p1')" class="p-2 cursor-pointer hover:bg-slate-100 col-p">排除前 <i id="sort-icon-p1" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+                            <th onclick="sortTable('p2')" class="p-2 cursor-pointer hover:bg-slate-100 col-p">排除後1 <i id="sort-icon-p2" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+                            <th onclick="sortTable('p3')" class="p-2 cursor-pointer hover:bg-slate-100 col-p">排除後2 <i id="sort-icon-p3" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+                            <th onclick="sortTable('p4')" class="p-2 cursor-pointer hover:bg-slate-100 border-r border-slate-200 col-p">排除後3 <i id="sort-icon-p4" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+
+                            <!--每張處方藥費-->
+                            <th onclick="sortTable('r1')" class="p-2 cursor-pointer hover:bg-slate-100 col-r">排除前 <i id="sort-icon-r1" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+                            <th onclick="sortTable('r2')" class="p-2 cursor-pointer hover:bg-slate-100 col-r">排除後1 <i id="sort-icon-r2" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+                            <th onclick="sortTable('r3')" class="p-2 cursor-pointer hover:bg-slate-100 col-r">排除後2 <i id="sort-icon-r3" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+                            <th onclick="sortTable('r4')" class="p-2 cursor-pointer hover:bg-slate-100 border-r border-slate-200 col-r">排除後3 <i id="sort-icon-r4" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+
+                            <!--每張處方品項數-->
+                            <th onclick="sortTable('i1')" class="p-2 cursor-pointer hover:bg-slate-100 col-i">排除前 <i id="sort-icon-i1" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+                            <th onclick="sortTable('i2')" class="p-2 cursor-pointer hover:bg-slate-100 col-i">排除後1 <i id="sort-icon-i2" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+                            <th onclick="sortTable('i3')" class="p-2 cursor-pointer hover:bg-slate-100 col-i">排除後2 <i id="sort-icon-i3" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+                            <th onclick="sortTable('i4')" class="p-2 cursor-pointer hover:bg-slate-100 col-i">排除後3 <i id="sort-icon-i4" class="fa-solid fa-sort text-slate-300 ml-0.5"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-100 bg-white font-mono">
+                        <!-- Dynamic Content Generated via JS -->
+                    </tbody>
+                    <tfoot id="tableFoot" class="bg-amber-50/90 font-bold text-amber-950 sticky bottom-0 border-t-2 border-amber-300 z-20">
+                        <!-- Total Row Pinned at Bottom -->
+                    </tfoot>
+                </table>
+            </div>
+            <div class="px-4 py-2.5 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center">
+                <span>提示：點擊表頭即可對該項數值進行升降序排列，點擊科別名稱可開啟詳細分析面板。</span>
+                <span id="showingCountText">顯示 25 個科別</span>
+            </div>
+        </section>
+
+        <!-- Footnotes & Exclusion Rules Cards -->
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-1.5">
+                <div class="flex items-center gap-2 text-slate-800 font-bold text-xs">
+                    <span class="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block"></span>
+                    <span>排除前 (基準)</span>
+                </div>
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    列計門診所有案件，未做任何扣除與過濾。
+                </p>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-rose-200 bg-rose-50/20 shadow-xs space-y-1.5">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 text-rose-800 font-bold text-xs">
+                        <span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>
+                        <span>排除後 1 (1150811 版)</span>
+                    </div>
+                    <span class="text-[10px] font-bold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded">共 141 項</span>
+                </div>
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    排除指定藥品：抗病毒藥、透析液、戒菸藥、精神科長效針劑、僅為原廠的化療事業審品項。
+                </p>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-amber-200 bg-amber-50/20 shadow-xs space-y-1.5">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 text-amber-800 font-bold text-xs">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+                        <span>排除後 2 (1150817版-1)</span>
+                    </div>
+                    <span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">共 234 項</span>
+                </div>
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    1150811版基礎上，再增加排除「全化療」與「全事審」藥品。
+                </p>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-indigo-200 bg-indigo-50/20 shadow-xs space-y-1.5">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 text-indigo-800 font-bold text-xs">
+                        <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block"></span>
+                        <span>排除後 3 (1150817版-2)</span>
+                    </div>
+                    <span class="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">共 259 項</span>
+                </div>
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    1150811版基礎上，增加全化療、全事審，並進一步排除「單價 1,800 元以上」高價藥品。
+                </p>
+            </div>
+        </section>
+
+        <!-- Common Rules Banner -->
+        <div class="bg-slate-800 text-slate-200 rounded-xl p-4 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-circle-info text-sky-400 text-base"></i>
+                <span class="font-bold text-white">排除後 1-3 共通排除條件：</span>
+                <span class="text-slate-300">OPAT、職災、代辦、診察費=0且藥費=0 (例如：跨月檢驗檢查、DM等醫療給付改善方案之年度結案費...等)</span>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Department Detail Modal -->
+    <div id="deptModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden opacity-0 transition-opacity duration-200">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 transform scale-95 transition-transform duration-200" id="deptModalCard">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="p-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold">
+                        <i class="fa-solid fa-hospital-user"></i>
+                    </div>
+                    <div>
+                        <h3 id="modalDeptTitle" class="text-lg font-bold text-slate-900">科別詳細分析</h3>
+                        <p class="text-xs text-slate-500">科別與全院平均指標比較</p>
+                    </div>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Modal Content -->
+            <div class="py-4 space-y-4">
+                <!-- Comparison Grid -->
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div class="p-3 bg-blue-50/60 rounded-xl border border-blue-100">
+                        <div class="text-[11px] font-semibold text-blue-700 uppercase">每人次藥費 (排除後3)</div>
+                        <div id="modalVisitVal" class="text-lg font-extrabold text-blue-900 mt-1">$0</div>
+                        <div id="modalVisitDiff" class="text-[10px] font-bold text-slate-500 mt-0.5">較全院 -</div>
+                    </div>
+                    <div class="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100">
+                        <div class="text-[11px] font-semibold text-indigo-700 uppercase">每張處方藥費 (排除後3)</div>
+                        <div id="modalRxVal" class="text-lg font-extrabold text-indigo-900 mt-1">$0</div>
+                        <div id="modalRxDiff" class="text-[10px] font-bold text-slate-500 mt-0.5">較全院 -</div>
+                    </div>
+                    <div class="p-3 bg-purple-50/60 rounded-xl border border-purple-100">
+                        <div class="text-[11px] font-semibold text-purple-700 uppercase">每張處方品項數</div>
+                        <div id="modalItemVal" class="text-lg font-extrabold text-purple-900 mt-1">0.0</div>
+                        <div id="modalItemDiff" class="text-[10px] font-bold text-slate-500 mt-0.5">較全院 -</div>
+                    </div>
+                </div>
+
+                <!-- Modal Mini Chart -->
+                <div class="h-56 relative w-full pt-2">
+                    <canvas id="modalChart"></canvas>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex justify-end">
+                <button onclick="closeModal()" class="px-4 py-2 bg-slate-800 text-white text-xs font-semibold rounded-xl hover:bg-slate-700 transition">
+                    關閉
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Raw Dataset transcribed accurately from the image
+        const hospitalData = [
+            { dept: "家醫科", p1: 196, p2: 443, p3: 442, p4: 441, r1: 452, r2: 489, r3: 488, r4: 487, i1: 3.30, i2: 3.58, i3: 3.58, i4: 3.57 },
+            { dept: "血液腫瘤科", p1: 3669, p2: 1483, p3: 677, p4: 670, r1: 6114, r2: 1737, r3: 793, r4: 784, i1: 3.40, i2: 3.22, i3: 3.07, i4: 3.07 },
+            { dept: "心臟內科", p1: 662, p2: 785, p3: 785, p4: 784, r1: 821, r2: 813, r3: 813, r4: 811, i1: 3.96, i2: 3.97, i3: 3.97, i4: 3.97 },
+            { dept: "胸腔內科", p1: 1490, p2: 820, p3: 784, p4: 782, r1: 1692, r2: 873, r3: 835, r4: 833, i1: 3.53, i2: 3.55, i3: 3.54, i4: 3.54 },
+            { dept: "免疫風濕科", p1: 2768, p2: 1936, p3: 360, p4: 360, r1: 3008, r2: 1975, r3: 367, r4: 367, i1: 4.18, i2: 4.14, i3: 3.80, i4: 3.80 },
+            { dept: "肝膽腸胃科", p1: 792, p2: 273, p3: 255, p4: 255, r1: 1141, r2: 317, r3: 296, r4: 296, i1: 2.83, i2: 2.69, i3: 2.69, i4: 2.69 },
+            { dept: "神經內科", p1: 790, p2: 862, p3: 862, p4: 862, r1: 904, r2: 911, r3: 911, r4: 911, i1: 4.09, i2: 4.11, i3: 4.11, i4: 4.11 },
+            { dept: "新陳代謝科", p1: 719, p2: 1120, p3: 1105, p4: 964, r1: 1194, r2: 1203, r3: 1187, r4: 1035, i1: 3.51, i2: 3.53, i3: 3.53, i4: 3.49 },
+            { dept: "腎臟內科", p1: 468, p2: 731, p3: 731, p4: 729, r1: 781, r2: 786, r3: 786, r4: 784, i1: 3.47, i2: 3.48, i3: 3.48, i4: 3.48 },
+            { dept: "感染科", p1: 2321, p2: 216, p3: 216, p4: 216, r1: 2745, r2: 233, r3: 233, r4: 233, i1: 2.87, i2: 2.74, i3: 2.74, i4: 2.74 },
+            { dept: "心臟外科", p1: 79, p2: 86, p3: 86, p4: 84, r1: 140, r2: 143, r3: 143, r4: 139, i1: 1.89, i2: 1.90, i3: 1.90, i4: 1.90 },
+            { dept: "外科", p1: 1328, p2: 585, p3: 358, p4: 288, r1: 1921, r2: 782, r3: 479, r4: 385, i1: 3.42, i2: 3.41, i3: 3.23, i4: 3.22 },
+            { dept: "胸腔外科", p1: 68, p2: 73, p3: 71, p4: 71, r1: 177, r2: 176, r3: 172, r4: 172, i1: 2.53, i2: 2.52, i3: 2.52, i4: 2.52 },
+            { dept: "整形外科", p1: 45, p2: 47, p3: 47, p4: 47, r1: 98, r2: 101, r3: 101, r4: 101, i1: 2.05, i2: 2.08, i3: 2.08, i4: 2.08 },
+            { dept: "神經外科", p1: 469, p2: 494, p3: 396, p4: 307, r1: 654, r2: 661, r3: 529, r4: 411, i1: 3.26, i2: 3.28, i3: 3.27, i4: 3.24 },
+            { dept: "小兒科", p1: 106, p2: 129, p3: 129, p4: 80, r1: 129, r2: 144, r3: 144, r4: 89, i1: 3.18, i2: 3.39, i3: 3.39, i4: 3.39 },
+            { dept: "婦產科", p1: 62, p2: 119, p3: 118, p4: 118, r1: 143, r2: 140, r3: 139, r4: 139, i1: 2.13, i2: 2.13, i3: 2.12, i4: 2.12 },
+            { dept: "骨科", p1: 249, p2: 255, p3: 255, p4: 203, r1: 308, r2: 311, r3: 311, r4: 248, i1: 2.76, i2: 2.77, i3: 2.77, i4: 2.76 },
+            { dept: "泌尿科", p1: 1021, p2: 921, p3: 726, p4: 726, r1: 1188, r2: 1035, r3: 816, r4: 816, i1: 2.78, i2: 2.77, i3: 2.74, i4: 2.74 },
+            { dept: "眼科", p1: 427, p2: 102, p3: 102, p4: 102, r1: 443, r2: 105, r3: 105, r4: 105, i1: 1.92, i2: 1.90, i3: 1.90, i4: 1.90 },
+            { dept: "皮膚科", p1: 509, p2: 202, p3: 131, p4: 131, r1: 618, r2: 230, r3: 149, r4: 149, i1: 2.49, i2: 2.48, i3: 2.46, i4: 2.46 },
+            { dept: "身心科", p1: 714, p2: 451, p3: 451, p4: 451, r1: 768, r2: 469, r3: 469, r4: 469, i1: 2.72, i2: 2.68, i3: 2.68, i4: 2.68 },
+            { dept: "復健科", p1: 166, p2: 237, p3: 193, p4: 193, r1: 487, r2: 492, r3: 401, r4: 401, i1: 3.08, i2: 3.10, i3: 3.09, i4: 3.09 },
+            { dept: "急診", p1: 113, p2: 113, p3: 113, p4: 102, r1: 118, r2: 118, r3: 118, r4: 107, i1: 4.31, i2: 4.35, i3: 4.35, i4: 4.35 },
+            { dept: "放射腫瘤科", p1: 39, p2: 40, p3: 40, p4: 40, r1: 127, r2: 130, r3: 128, r4: 128, i1: 1.35, i2: 1.36, i3: 1.36, i4: 1.36 }
+        ];
+
+        const totalRow = {
+            dept: "全院", p1: 665, p2: 555, p3: 460, p4: 441,
+            r1: 931, r2: 642, r3: 532, r4: 509,
+            i1: 3.35, i2: 3.37, i3: 3.34, i4: 3.34
+        };
+
+        // Internal & Surgical lists
+        const internalDepts = ["家醫科", "血液腫瘤科", "心臟內科", "胸腔內科", "免疫風濕科", "肝膽腸胃科", "神經內科", "新陳代謝科", "腎臟內科", "感染科", "小兒科", "身心科", "復健科"];
+        const surgicalDepts = ["心臟外科", "外科", "胸腔外科", "整形外科", "神經外科", "婦產科", "骨科", "泌尿科", "眼科", "皮膚科", "急診", "放射腫瘤科"];
+
+        // State variables
+        let currentData = [...hospitalData];
+        let currentSort = { column: null, direction: 'asc' };
+        let activeHeatmap = false;
+        let activeMetric = 'perVisit'; // 'perVisit', 'perRx', 'items'
+        let mainChart = null;
+        let modalChart = null;
+
+        // Initialize App
+        window.onload = function() {
+            renderTable();
+            renderTotalRow();
+            initChart();
+        };
+
+        // Render Table Body
+        function renderTable() {
+            const tbody = document.getElementById("tableBody");
+            tbody.innerHTML = "";
+
+            currentData.forEach((row) => {
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-50 transition cursor-pointer text-center border-b border-slate-100";
+                
+                // Clicking row opens modal
+                tr.onclick = (e) => {
+                    openDeptModal(row.dept);
+                };
+
+                let html = `<td class="p-3 text-left font-bold text-slate-800 bg-slate-50/50 sticky left-0 border-r border-slate-200">${row.dept}</td>`;
+
+                // Helper for heatmap styling
+                const getHeatClass = (val, colKey) => {
+                    if (!activeHeatmap) return '';
+                    if (colKey.startsWith('p')) {
+                        if (val > 1000) return 'heatmap-high';
+                        if (val > 500) return 'heatmap-mid';
+                        return 'heatmap-low';
+                    }
+                    if (colKey.startsWith('r')) {
+                        if (val > 1200) return 'heatmap-high';
+                        if (val > 600) return 'heatmap-mid';
+                        return 'heatmap-low';
+                    }
+                    if (colKey.startsWith('i')) {
+                        if (val >= 3.8) return 'heatmap-high';
+                        if (val >= 3.0) return 'heatmap-mid';
+                        return 'heatmap-low';
+                    }
+                    return '';
+                };
+
+                // Render每人次藥費
+                html += `<td class="p-2 col-p ${getHeatClass(row.p1, 'p1')}">${row.p1.toLocaleString()}</td>`;
+                html += `<td class="p-2 col-p ${getHeatClass(row.p2, 'p2')}">${row.p2.toLocaleString()}</td>`;
+                html += `<td class="p-2 col-p ${getHeatClass(row.p3, 'p3')}">${row.p3.toLocaleString()}</td>`;
+                html += `<td class="p-2 border-r border-slate-200 font-semibold col-p ${getHeatClass(row.p4, 'p4')}">${row.p4.toLocaleString()}</td>`;
+
+                // Render每張處方藥費
+                html += `<td class="p-2 col-r ${getHeatClass(row.r1, 'r1')}">${row.r1.toLocaleString()}</td>`;
+                html += `<td class="p-2 col-r ${getHeatClass(row.r2, 'r2')}">${row.r2.toLocaleString()}</td>`;
+                html += `<td class="p-2 col-r ${getHeatClass(row.r3, 'r3')}">${row.r3.toLocaleString()}</td>`;
+                html += `<td class="p-2 border-r border-slate-200 font-semibold col-r ${getHeatClass(row.r4, 'r4')}">${row.r4.toLocaleString()}</td>`;
+
+                // Render每張處方品項數
+                html += `<td class="p-2 col-i ${getHeatClass(row.i1, 'i1')}">${row.i1.toFixed(2)}</td>`;
+                html += `<td class="p-2 col-i ${getHeatClass(row.i2, 'i2')}">${row.i2.toFixed(2)}</td>`;
+                html += `<td class="p-2 col-i ${getHeatClass(row.i3, 'i3')}">${row.i3.toFixed(2)}</td>`;
+                html += `<td class="p-2 font-semibold col-i ${getHeatClass(row.i4, 'i4')}">${row.i4.toFixed(2)}</td>`;
+
+                tr.innerHTML = html;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById("showingCountText").innerText = `顯示 ${currentData.length} 個科別`;
+        }
+
+        // Render Total Row
+        function renderTotalRow() {
+            const tfoot = document.getElementById("tableFoot");
+            tfoot.innerHTML = `
+                <tr class="text-center">
+                    <td class="p-3 text-left font-bold text-amber-950 bg-amber-200/60 border-r border-amber-300">
+                        <i class="fa-solid fa-star text-amber-600 mr-1"></i>${totalRow.dept}
+                    </td>
+                    <td class="p-2 col-p">${totalRow.p1.toLocaleString()}</td>
+                    <td class="p-2 col-p">${totalRow.p2.toLocaleString()}</td>
+                    <td class="p-2 col-p">${totalRow.p3.toLocaleString()}</td>
+                    <td class="p-2 border-r border-amber-300 font-extrabold col-p">${totalRow.p4.toLocaleString()}</td>
+
+                    <td class="p-2 col-r">${totalRow.r1.toLocaleString()}</td>
+                    <td class="p-2 col-r">${totalRow.r2.toLocaleString()}</td>
+                    <td class="p-2 col-r">${totalRow.r3.toLocaleString()}</td>
+                    <td class="p-2 border-r border-amber-300 font-extrabold col-r">${totalRow.r4.toLocaleString()}</td>
+
+                    <td class="p-2 col-i">${totalRow.i1.toFixed(2)}</td>
+                    <td class="p-2 col-i">${totalRow.i2.toFixed(2)}</td>
+                    <td class="p-2 col-i">${totalRow.i3.toFixed(2)}</td>
+                    <td class="p-2 font-extrabold col-i">${totalRow.i4.toFixed(2)}</td>
+                </tr>
+            `;
+        }
+
+        // Column Sorting Logic
+        function sortTable(column) {
+            // Reset icons
+            const allKeys = ['dept', 'p1','p2','p3','p4','r1','r2','r3','r4','i1','i2','i3','i4'];
+            allKeys.forEach(key => {
+                const icon = document.getElementById(`sort-icon-${key}`);
+                if (icon) icon.className = "fa-solid fa-sort text-slate-300 ml-0.5";
+            });
+
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = column;
+                currentSort.direction = 'asc';
+            }
+
+            const activeIcon = document.getElementById(`sort-icon-${column}`);
+            if (activeIcon) {
+                activeIcon.className = currentSort.direction === 'asc' 
+                    ? "fa-solid fa-sort-up text-blue-600 ml-0.5" 
+                    : "fa-solid fa-sort-down text-blue-600 ml-0.5";
+            }
+
+            currentData.sort((a, b) => {
+                let valA = a[column];
+                let valB = b[column];
+
+                if (typeof valA === 'string') {
+                    return currentSort.direction === 'asc' 
+                        ? valA.localeCompare(valB, 'zh-TW') 
+                        : valB.localeCompare(valA, 'zh-TW');
+                }
+
+                return currentSort.direction === 'asc' ? valA - valB : valB - valA;
+            });
+
+            renderTable();
+        }
+
+        // Search Filter
+        function handleSearch() {
+            const query = document.getElementById("searchInput").value.trim().toLowerCase();
+            currentData = hospitalData.filter(item => item.dept.toLowerCase().includes(query));
+            renderTable();
+        }
+
+        // Toggle Heatmap
+        function toggleHeatmap() {
+            activeHeatmap = document.getElementById("heatmapToggle").checked;
+            renderTable();
+        }
+
+        // Table Focus View Switching
+        function setTableFocus(type) {
+            // Buttons UI state
+            ['all', 'p', 'r', 'i'].forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                if (t === type) {
+                    btn.className = "px-2.5 py-1 font-semibold rounded-md bg-white text-blue-600 shadow-xs";
+                } else {
+                    btn.className = "px-2.5 py-1 font-medium rounded-md text-slate-600 hover:text-slate-900";
+                }
+            });
+
+            const pCols = document.querySelectorAll('.col-p');
+            const rCols = document.querySelectorAll('.col-r');
+            const iCols = document.querySelectorAll('.col-i');
+
+            const pGroup = document.querySelectorAll('.col-group-p');
+            const rGroup = document.querySelectorAll('.col-group-r');
+            const iGroup = document.querySelectorAll('.col-group-i');
+
+            if (type === 'all') {
+                [...pCols, ...rCols, ...iCols, ...pGroup, ...rGroup, ...iGroup].forEach(el => el.classList.remove('hidden'));
+            } else if (type === 'p') {
+                [...pCols, ...pGroup].forEach(el => el.classList.remove('hidden'));
+                [...rCols, ...iCols, ...rGroup, ...iGroup].forEach(el => el.classList.add('hidden'));
+            } else if (type === 'r') {
+                [...rCols, ...rGroup].forEach(el => el.classList.remove('hidden'));
+                [...pCols, ...iCols, ...pGroup, ...iGroup].forEach(el => el.classList.add('hidden'));
+            } else if (type === 'i') {
+                [...iCols, ...iGroup].forEach(el => el.classList.remove('hidden'));
+                [...pCols, ...rCols, ...pGroup, ...rGroup].forEach(el => el.classList.add('hidden'));
+            }
+        }
+
+        // Chart Metrics Switcher
+        function setChartMetric(metric) {
+            activeMetric = metric;
+            const btnVisit = document.getElementById('btn-metric-visit');
+            const btnRx = document.getElementById('btn-metric-rx');
+            const btnItems = document.getElementById('btn-metric-items');
+
+            const activeClass = "px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-white text-blue-600 shadow-xs";
+            const inactiveClass = "px-3 py-1.5 text-xs font-semibold text-slate-600 rounded-lg transition hover:text-slate-900";
+
+            btnVisit.className = metric === 'perVisit' ? activeClass : inactiveClass;
+            btnRx.className = metric === 'perRx' ? activeClass : inactiveClass;
+            btnItems.className = metric === 'items' ? activeClass : inactiveClass;
+
+            updateChart();
+        }
+
+        // Initialize Main Chart
+        function initChart() {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            mainChart = new Chart(ctx, {
+                type: 'bar',
+                data: getChartData(),
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: { family: 'Inter, Noto Sans TC', size: 12 },
+                                usePointStyle: true,
+                                boxWidth: 8
+                            }
+                        },
+                        tooltip: {
+                            padding: 10,
+                            titleFont: { family: 'Noto Sans TC', size: 13, weight: 'bold' },
+                            bodyFont: { family: 'Inter', size: 12 },
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (activeMetric === 'items') {
+                                        label += context.parsed.y + ' 項';
+                                    } else {
+                                        label += '$' + context.parsed.y.toLocaleString();
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { font: { family: 'Noto Sans TC', size: 11 } }
+                        },
+                        y: {
+                            border: { dash: [4, 4] },
+                            grid: { color: '#f1f5f9' },
+                            ticks: { font: { family: 'Inter', size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Filter and Get Chart Dataset
+        function getChartData() {
+            const filterVal = document.getElementById('chartDeptFilter').value;
+            let filtered = [...hospitalData];
+
+            if (filterVal === 'top10') {
+                // Top 10 cost reduction rate (p1 to p4)
+                filtered.sort((a, b) => ((b.p1 - b.p4) / b.p1) - ((a.p1 - a.p4) / a.p1));
+                filtered = filtered.slice(0, 10);
+            } else if (filterVal === 'highest') {
+                filtered.sort((a, b) => b.p1 - a.p1);
+                filtered = filtered.slice(0, 10);
+            } else if (filterVal === 'internal') {
+                filtered = filtered.filter(d => internalDepts.includes(d.dept));
+            } else if (filterVal === 'surgical') {
+                filtered = filtered.filter(d => surgicalDepts.includes(d.dept));
+            }
+
+            const labels = filtered.map(d => d.dept);
+
+            let k1 = 'p1', k2 = 'p2', k3 = 'p3', k4 = 'p4';
+            if (activeMetric === 'perRx') { k1 = 'r1'; k2 = 'r2'; k3 = 'r3'; k4 = 'r4'; }
+            if (activeMetric === 'items') { k1 = 'i1'; k2 = 'i2'; k3 = 'i3'; k4 = 'i4'; }
+
+            return {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '排除前',
+                        data: filtered.map(d => d[k1]),
+                        backgroundColor: '#94a3b8',
+                        borderRadius: 4,
+                    },
+                    {
+                        label: '排除後1',
+                        data: filtered.map(d => d[k2]),
+                        backgroundColor: '#60a5fa',
+                        borderRadius: 4,
+                    },
+                    {
+                        label: '排除後2',
+                        data: filtered.map(d => d[k3]),
+                        backgroundColor: '#818cf8',
+                        borderRadius: 4,
+                    },
+                    {
+                        label: '排除後3',
+                        data: filtered.map(d => d[k4]),
+                        backgroundColor: '#0284c7',
+                        borderRadius: 4,
+                    }
+                ]
+            };
+        }
+
+        function updateChart() {
+            if (!mainChart) return;
+            mainChart.data = getChartData();
+            mainChart.update();
+        }
+
+        // Open Modal Details for Specific Department
+        function openDeptModal(deptName) {
+            const item = hospitalData.find(d => d.dept === deptName);
+            if (!item) return;
+
+            document.getElementById('modalDeptTitle').innerText = `${item.dept} - 詳細分析`;
+            document.getElementById('modalVisitVal').innerText = `$${item.p4.toLocaleString()}`;
+            document.getElementById('modalRxVal').innerText = `$${item.r4.toLocaleString()}`;
+            document.getElementById('modalItemVal').innerText = `${item.i4.toFixed(2)} 項`;
+
+            // Comparison against hospital average
+            const visitDiff = ((item.p4 - totalRow.p4) / totalRow.p4 * 100).toFixed(1);
+            const rxDiff = ((item.r4 - totalRow.r4) / totalRow.r4 * 100).toFixed(1);
+            const itemDiff = ((item.i4 - totalRow.i4) / totalRow.i4 * 100).toFixed(1);
+
+            document.getElementById('modalVisitDiff').innerHTML = visitDiff >= 0 
+                ? `<span class="text-rose-600">高於全院 +${visitDiff}%</span>` 
+                : `<span class="text-emerald-600">低於全院 ${visitDiff}%</span>`;
+
+            document.getElementById('modalRxDiff').innerHTML = rxDiff >= 0 
+                ? `<span class="text-rose-600">高於全院 +${rxDiff}%</span>` 
+                : `<span class="text-emerald-600">低於全院 ${rxDiff}%</span>`;
+
+            document.getElementById('modalItemDiff').innerHTML = itemDiff >= 0 
+                ? `<span class="text-rose-600">高於全院 +${itemDiff}%</span>` 
+                : `<span class="text-emerald-600">低於全院 ${itemDiff}%</span>`;
+
+            // Modal Chart
+            const modalCtx = document.getElementById('modalChart').getContext('2d');
+            if (modalChart) modalChart.destroy();
+
+            modalChart = new Chart(modalCtx, {
+                type: 'line',
+                data: {
+                    labels: ['排除前', '排除後1 (1150811)', '排除後2 (1150817-1)', '排除後3 (1150817-2)'],
+                    datasets: [
+                        {
+                            label: `${item.dept} (每人次藥費)`,
+                            data: [item.p1, item.p2, item.p3, item.p4],
+                            borderColor: '#0284c7',
+                            backgroundColor: 'rgba(2, 132, 199, 0.1)',
+                            borderWidth: 2.5,
+                            fill: true,
+                            tension: 0.2,
+                            pointRadius: 4
+                        },
+                        {
+                            label: `全院平均 (每人次藥費)`,
+                            data: [totalRow.p1, totalRow.p2, totalRow.p3, totalRow.p4],
+                            borderColor: '#f59e0b',
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.2,
+                            pointRadius: 3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: function(value) { return '$' + value; }
+                            }
+                        }
+                    }
+                }
+            });
+
+            const modal = document.getElementById('deptModal');
+            const card = document.getElementById('deptModalCard');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                card.classList.remove('scale-95');
+            }, 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('deptModal');
+            const card = document.getElementById('deptModalCard');
+            modal.classList.add('opacity-0');
+            card.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        // CSV Export Function
+        function exportToCSV() {
+            let csvContent = "\uFEFF"; // UTF-8 BOM
+            csvContent += "科別,每人次藥費(排除前),每人次藥費(排除後1),每人次藥費(排除後2),每人次藥費(排除後3),每張處方藥費(排除前),每張處方藥費(排除後1),每張處方藥費(排除後2),每張處方藥費(排除後3),每張處方品項數(排除前),每張處方品項數(排除後1),每張處方品項數(排除後2),每張處方品項數(排除後3)\n";
+
+            currentData.forEach(row => {
+                const line = [
+                    row.dept,
+                    row.p1, row.p2, row.p3, row.p4,
+                    row.r1, row.r2, row.r3, row.r4,
+                    row.i1, row.i2, row.i3, row.i4
+                ].join(",");
+                csvContent += line + "\n";
+            });
+
+            // Append Total Row
+            const totalLine = [
+                totalRow.dept,
+                totalRow.p1, totalRow.p2, totalRow.p3, totalRow.p4,
+                totalRow.r1, totalRow.r2, totalRow.r3, totalRow.r4,
+                totalRow.i1, totalRow.i2, totalRow.i3, totalRow.i4
+            ].join(",");
+            csvContent += totalLine + "\n";
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `醫院各科別藥費處方品項數據分析.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
